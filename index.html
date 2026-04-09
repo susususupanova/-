@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCS 학습 게임</title>
+
+<style>
+body {
+  font-family: Arial;
+  background: #fef6fb;
+  margin: 0;
+  padding: 15px;
+}
+
+.container {
+  max-width: 500px;
+  margin: auto;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+}
+
+h2 {
+  text-align: center;
+  color: #7c3aed;
+}
+
+.card {
+  background: #ede9fe;
+  padding: 15px;
+  border-radius: 15px;
+  margin-bottom: 15px;
+}
+
+select {
+  width: 100%;
+  padding: 12px;
+  margin: 5px 0;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+}
+
+/* 🔥 여기 수정됨 */
+button {
+  width: 100%;
+  padding: 12px;
+  margin: 5px 0;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+  color: white; /* ✅ 글씨 흰색 */
+}
+
+.submit { background: #a5b4fc; }
+.next { background: #c4b5fd; }
+.restart { background: #f9a8d4; }
+
+.result {
+  white-space: pre-line;
+  margin-top: 10px;
+}
+
+.stats {
+  background: #fce7f3;
+  padding: 10px;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.hidden { display:none; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>🧠 GCS 학습 게임</h2>
+
+<div class="card">
+<p id="question"></p>
+</div>
+
+<div id="quizArea">
+<h3>👁 Eye</h3>
+<select id="eye">
+<option value="4">E4</option>
+<option value="3">E3</option>
+<option value="2">E2</option>
+<option value="1">E1</option>
+</select>
+
+<h3>🗣 Verbal</h3>
+<select id="verbal">
+<option value="5">V5</option>
+<option value="4">V4</option>
+<option value="3">V3</option>
+<option value="2">V2</option>
+<option value="1">V1</option>
+</select>
+
+<h3>💪 Motor</h3>
+<select id="motor">
+<option value="6">M6</option>
+<option value="5">M5</option>
+<option value="4">M4</option>
+<option value="3">M3</option>
+<option value="2">M2</option>
+<option value="1">M1</option>
+</select>
+
+<button class="submit" onclick="check()">제출</button>
+<button class="next" onclick="nextQuestion()">다음 문제</button>
+</div>
+
+<p class="result" id="result"></p>
+<div class="stats" id="stats"></div>
+
+<div id="roundEnd" class="hidden">
+<h3>📊 라운드 결과</h3>
+<p id="roundResult"></p>
+<button class="next" onclick="continueGame()">다음 라운드</button>
+</div>
+
+<div id="reviewEnd" class="hidden">
+<h3>🎯 오답 복습 완료</h3>
+<button class="restart" onclick="startGame()">다시 시작</button>
+</div>
+
+</div>
+
+<script>
+
+// 통계
+let stats = {E:{c:0,t:0}, V:{c:0,t:0}, M:{c:0,t:0}};
+let wrongAnswers = [];
+let wrongThisRound = 0;
+
+// 데이터
+const E_map = {
+ "자발적으로 눈을 뜬다":{s:4,e:"자발적 → E4"},
+ "이름을 부르면 눈을 뜬다":{s:3,e:"언어 자극 → E3"},
+ "통증 자극에 눈을 뜬다":{s:2,e:"통증 반응 → E2"},
+ "눈을 뜨지 않는다":{s:1,e:"반응 없음 → E1"}
+};
+
+const V_map = {
+ "정상 대화를 한다":{s:5,e:"정상 대화 → V5"},
+ "혼란된 대화를 한다":{s:4,e:"혼란 → V4"},
+ "부적절한 단어를 사용한다":{s:3,e:"부적절 → V3"},
+ "이해할 수 없는 소리를 낸다":{s:2,e:"무의미 → V2"},
+ "언어 반응이 없다":{s:1,e:"반응 없음 → V1"}
+};
+
+const M_map = {
+ "명령에 따라 움직인다":{s:6,e:"명령 수행 → M6"},
+ "통증 자극을 제거하려 한다":{s:5,e:"자극 제거 → M5"},
+ "통증 부위를 피한다":{s:4,e:"회피 → M4"},
+ "비정상 굴곡 반응":{s:3,e:"굴곡 → M3"},
+ "비정상 신전 반응":{s:2,e:"신전 → M2"},
+ "운동 반응 없음":{s:1,e:"반응 없음 → M1"}
+};
+
+const E_keys = Object.keys(E_map);
+const V_keys = Object.keys(V_map);
+const M_keys = Object.keys(M_map);
+
+function pool(){
+ let p=[];
+ E_keys.forEach(e=>{
+  V_keys.forEach(v=>{
+   M_keys.forEach(m=>{
+    p.push({eText:e,vText:v,mText:m,E:E_map[e],V:V_map[v],M:M_map[m]});
+   });
+  });
+ });
+ return p;
+}
+
+function shuffle(a){return a.sort(()=>Math.random()-0.5);}
+
+let gameSet=[], currentIndex=0, round=1, current, reviewMode=false;
+
+function startGame(){
+ gameSet=shuffle(pool()).slice(0,50);
+ currentIndex=0;
+ round=1;
+ wrongAnswers=[];
+ reviewMode=false;
+ load();
+}
+
+function load(){
+ document.getElementById("quizArea").style.display="block";
+ document.getElementById("roundEnd").classList.add("hidden");
+ document.getElementById("reviewEnd").classList.add("hidden");
+
+ current=gameSet[currentIndex];
+ question.innerText=`${current.eText}, ${current.vText}, ${current.mText}`;
+ result.innerText=`📍 ${reviewMode?"복습":round+"라운드"} (${(currentIndex%10)+1}/10)`;
+}
+
+function check(){
+ let e=Number(eye.value),v=Number(verbal.value),m=Number(motor.value);
+
+ stats.E.t++; stats.V.t++; stats.M.t++;
+ if(e===current.E.s) stats.E.c++;
+ if(v===current.V.s) stats.V.c++;
+ if(m===current.M.s) stats.M.c++;
+
+ let correct=(e===current.E.s&&v===current.V.s&&m===current.M.s);
+ if(!correct){
+   wrongAnswers.push(current);
+   wrongThisRound++;
+ }
+
+ result.innerText=
+ `${correct?"✅ 정답":"❌ 틀림"}
+
+정답: E${current.E.s} V${current.V.s} M${current.M.s}
+
+📖 풀이
+- ${current.eText} → ${current.E.e}
+- ${current.vText} → ${current.V.e}
+- ${current.mText} → ${current.M.e}`;
+
+ updateStats();
+}
+
+function nextQuestion(){
+ currentIndex++;
+
+ if(!reviewMode && currentIndex%10===0){
+   showRoundResult();
+   return;
+ }
+
+ if(!reviewMode && currentIndex===50){
+   startReview();
+   return;
+ }
+
+ if(reviewMode && currentIndex===gameSet.length){
+   endReview();
+   return;
+ }
+
+ load();
+}
+
+function showRoundResult(){
+ document.getElementById("quizArea").style.display="none";
+ document.getElementById("roundEnd").classList.remove("hidden");
+
+ function p(c,t){return t?Math.round(c/t*100):0;}
+
+ roundResult.innerText=
+ `틀린 문제: ${wrongThisRound}개
+
+E 정확도: ${p(stats.E.c,stats.E.t)}%
+V 정확도: ${p(stats.V.c,stats.V.t)}%
+M 정확도: ${p(stats.M.c,stats.M.t)}%`;
+
+ wrongThisRound=0;
+ round++;
+}
+
+function continueGame(){
+ load();
+}
+
+function startReview(){
+ if(wrongAnswers.length===0){
+   startGame();
+   return;
+ }
+ reviewMode=true;
+ gameSet=[...wrongAnswers];
+ currentIndex=0;
+ load();
+}
+
+function endReview(){
+ document.getElementById("quizArea").style.display="none";
+ document.getElementById("reviewEnd").classList.remove("hidden");
+}
+
+function updateStats(){
+ function p(c,t){return t?Math.round(c/t*100):0;}
+ stats.innerText=
+ `📊 약한 영역 분석
+E: ${p(stats.E.c,stats.E.t)}%
+V: ${p(stats.V.c,stats.V.t)}%
+M: ${p(stats.M.c,stats.M.t)}%`;
+}
+
+startGame();
+
+</script>
+
+</body>
+</html>
